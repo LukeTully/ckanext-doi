@@ -49,7 +49,13 @@ class DOIPlugin(p.SingletonPlugin, p.toolkit.DefaultDatasetForm):
         @param pkg_dict:
         @return:
         """
-        create_unique_identifier(pkg_dict['id'])
+        # Only create a new DOI if the user has requested it
+        if hasattr(pkg_dict, "doi_auto_create"):
+            # Create a new doi
+            create_unique_identifier(pkg_dict['id'])
+
+        return pkg_dict
+
 
     # IPackageController
     def after_update(self, context, pkg_dict):
