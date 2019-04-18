@@ -9,7 +9,7 @@ import ckan.logic as logic
 from ckan.lib import helpers as h
 from ckan import model
 from ckanext.doi.model import doi as doi_model
-from ckanext.doi.lib import get_doi, publish_doi, update_doi, create_unique_identifier, get_site_url, build_metadata, validate_metadata
+from ckanext.doi.lib import get_doi, publish_doi, update_doi, create_unique_identifier, get_site_url, build_metadata, validate_metadata, record_existing_unique_identifier
 from ckanext.doi.helpers import package_get_year, now, get_site_title
 
 get_action = logic.get_action
