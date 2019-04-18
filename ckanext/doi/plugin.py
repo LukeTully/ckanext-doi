@@ -56,8 +56,8 @@ class DOIPlugin(p.SingletonPlugin, p.toolkit.DefaultDatasetForm):
 
         return pkg_dict
 
-
     # IPackageController
+
     def after_update(self, context, pkg_dict):
         """
         Dataset has been created / updated
@@ -66,25 +66,66 @@ class DOIPlugin(p.SingletonPlugin, p.toolkit.DefaultDatasetForm):
         @param pkg_dict:
         @return: pkg_dict
         """
+
+        package_id = pkg_dict['id']
+
+        # Load the original package, so we can determine if user has changed any fields
+        orig_pkg_dict = get_action('package_show')(context, {
+            'id': package_id
+        })
+
+        # Metadata created isn't populated in pkg_dict - so copy from the original
+        pkg_dict['metadata_created'] = orig_pkg_dict['metadata_created']
+
+        # Load the local DOI
+        doi = get_doi(package_id)
+
+        if 'doi_auto_create' in pkg_dict:
+            if not doi:
+                # Overwrite any existing identifier with a newly minted DOI
+                create_unique_identifier(package_id)
+            pkg_dict['identifier'] = doi.identifier
+            pkg_dict['identifier_type'] = 'doi'
+            # Remove the auto create field from the dataset pkg
+            pkg_dict.pop('doi_auto_create')
+
+        # If we don't have a DOI, create one
+        # This could happen if the DOI module is enabled after a dataset has been created
+        if not doi:
+            if pkg_dict['identifier'] and pkg_dict['identifier_type'] == 'doi':
+                # We don't have a DOI, we're not auto creating one, the user has input an existing doi
+                new_doi = record_existing_unique_identifier(
+                    package_id, pkg_dict['identifier'])
+
+                # If the existing doi was successfully recorded
+                if new_doi:
+                    # Assign the doi
+                    doi = new_doi
+            else:
+                # TODO: Remove DOI?
+                return pkg_dict
+        elif pkg_dict['identifier'] and pkg_dict['identifier_type'] == 'doi':
+            # A DOI has been provided by the user
+            # Check if the DOI in our table has the same identifier
+            if doi.identifier is not pkg_dict['identifier']:
+                # Remove from our DOI table
+                doi.delete()
+
+                # Make sure the new DOI is registered with DataCite
+                new_doi = record_existing_unique_identifier(
+                    package_id, pkg_dict['identifier'])
+                if new_doi:
+                    doi = new_doi
+
+        elif pkg_dict['identifier_type'] == 'other':
+            # Remove the DOi from our database
+            doi.delete()
+
+            # Let the other type identifier persist in the dataset package
+            return pkg_dict
+
         # Is this active and public? If so we need to make sure we have an active DOI
         if pkg_dict.get('state', 'active') == 'active' and not pkg_dict.get('private', False):
-
-            package_id = pkg_dict['id']
-
-            # Load the original package, so we can determine if user has changed any fields
-            orig_pkg_dict = get_action('package_show')(
-                context, {'id': package_id})
-
-            # Metadata created isn't populated in pkg_dict - so copy from the original
-            pkg_dict['metadata_created'] = orig_pkg_dict['metadata_created']
-
-            # Load the local DOI
-            doi = get_doi(package_id)
-
-            # If we don't have a DOI, create one
-            # This could happen if the DOI module is enabled after a dataset has been created
-            if not doi:
-                doi = create_unique_identifier(package_id)
 
             # Build the metadata dict to pass to DataCite service
             metadata_dict = build_metadata(pkg_dict, doi)
