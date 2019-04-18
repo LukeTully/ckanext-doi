@@ -201,3 +201,30 @@ def validate_metadata(metadata_dict):
     for field in mandatory_fields:
         if not metadata_dict.get(field, None):
             raise DOIMetadataException('Missing DataCite required field %s' % field)
+
+def record_existing_unique_identifier(package_id, identifier):
+    """
+    Based on a provided identifier, checks datacite for an existing DOI
+    Saves to local CKAN database
+    :param package_id: string
+    :param identifier: string
+    :return DOI object if saved, false if it didn't exist in datacite
+    """
+    datacite_api = DOIDataCiteAPI()
+
+    # Check this identifier doesn't exist in the table
+    if not Session.query(DOI).filter(DOI.identifier == identifier).count():
+
+        # And check against the datacite service
+        try:
+            datacite_doi = datacite_api.get(identifier)
+        except HTTPError:
+            pass
+
+        if datacite_doi.text:
+            doi = DOI(package_id=package_id, identifier=identifier)
+            Session.add(doi)
+            Session.commit()
+            return doi
+        else:
+            return False  # DOI didn't exist
