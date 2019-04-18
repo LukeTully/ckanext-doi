@@ -26,7 +26,7 @@ class DOIPlugin(p.SingletonPlugin, p.toolkit.DefaultDatasetForm):
     p.implements(p.IPackageController, inherit=True)
     p.implements(p.ITemplateHelpers, inherit=True)
 
-    ## IConfigurable
+    # IConfigurable
     def configure(self, config):
         """
         Called at the end of CKAN setup.
@@ -35,12 +35,12 @@ class DOIPlugin(p.SingletonPlugin, p.toolkit.DefaultDatasetForm):
         if model.package_table.exists():
             doi_model.doi_table.create(checkfirst=True)
 
-    ## IConfigurer
+    # IConfigurer
     def update_config(self, config):
         # Add templates
         p.toolkit.add_template_directory(config, 'theme/templates')
 
-    ## IPackageController
+    # IPackageController
     def after_create(self, context, pkg_dict):
         """
         A new dataset has been created, so we need to create a new DOI
@@ -51,7 +51,7 @@ class DOIPlugin(p.SingletonPlugin, p.toolkit.DefaultDatasetForm):
         """
         create_unique_identifier(pkg_dict['id'])
 
-    ## IPackageController
+    # IPackageController
     def after_update(self, context, pkg_dict):
         """
         Dataset has been created / updated
@@ -66,7 +66,8 @@ class DOIPlugin(p.SingletonPlugin, p.toolkit.DefaultDatasetForm):
             package_id = pkg_dict['id']
 
             # Load the original package, so we can determine if user has changed any fields
-            orig_pkg_dict = get_action('package_show')(context, {'id': package_id})
+            orig_pkg_dict = get_action('package_show')(
+                context, {'id': package_id})
 
             # Metadata created isn't populated in pkg_dict - so copy from the original
             pkg_dict['metadata_created'] = orig_pkg_dict['metadata_created']
@@ -117,7 +118,8 @@ class DOIPlugin(p.SingletonPlugin, p.toolkit.DefaultDatasetForm):
             pkg_dict['doi'] = doi.identifier
             pkg_dict['doi_status'] = True if doi.published else False
             pkg_dict['domain'] = get_site_url().replace('http://', '')
-            pkg_dict['doi_date_published'] = datetime.strftime(doi.published, "%Y-%m-%d") if doi.published else None
+            pkg_dict['doi_date_published'] = datetime.strftime(
+                doi.published, "%Y-%m-%d") if doi.published else None
             pkg_dict['doi_publisher'] = config.get("ckanext.doi.publisher")
 
     # ITemplateHelpers
