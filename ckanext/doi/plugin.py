@@ -92,7 +92,7 @@ class DOIPlugin(p.SingletonPlugin, p.toolkit.DefaultDatasetForm):
         # If we don't have a DOI, create one
         # This could happen if the DOI module is enabled after a dataset has been created
         if not doi:
-            if pkg_dict['identifier'] and pkg_dict['identifier_type'] == 'doi':
+            if pkg_dict.get('identifier') and pkg_dict.get('identifier_type'):
                 # We don't have a DOI, we're not auto creating one, the user has input an existing doi
                 new_doi = record_existing_unique_identifier(
                     package_id, pkg_dict['identifier'])
@@ -104,7 +104,7 @@ class DOIPlugin(p.SingletonPlugin, p.toolkit.DefaultDatasetForm):
             else:
                 # TODO: Remove DOI?
                 return pkg_dict
-        elif pkg_dict['identifier'] and pkg_dict['identifier_type'] == 'doi':
+        elif pkg_dict.get('identifier') and pkg_dict.get('identifier_type'):
             # A DOI has been provided by the user
             # Check if the DOI in our table has the same identifier
             if doi.identifier is not pkg_dict['identifier']:
@@ -117,7 +117,7 @@ class DOIPlugin(p.SingletonPlugin, p.toolkit.DefaultDatasetForm):
                 if new_doi:
                     doi = new_doi
 
-        elif pkg_dict['identifier_type'] == 'other':
+        elif pkg_dict.get('identifier_type') == 'other':
             # Remove the DOi from our database
             doi.delete()
 
