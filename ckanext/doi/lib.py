@@ -22,6 +22,7 @@ from ckanext.doi.datacite import get_prefix
 from ckanext.doi.interfaces import IDoi
 from ckanext.doi.exc import DOIMetadataException
 from ckanext.doi.helpers import package_get_year
+from ckan.plugins.toolkit import Invalid
 
 log = getLogger(__name__)
 
@@ -202,6 +203,34 @@ def validate_metadata(metadata_dict):
         if not metadata_dict.get(field, None):
             raise DOIMetadataException('Missing DataCite required field %s' % field)
 
+# Validator
+def check_existing_doi(key, flattened_data, errors, context):
+    """
+        Based on a provided identifier, checks datacite for an existing DOI
+        :param package_id: string
+        :param identifier: string
+        :return DOI object if saved, false if it didn't exist in datacite
+        """
+    datacite_api = DOIDataCiteAPI()
+    identifier = flattened_data[key]
+    identifier_type = flattened_data[('identifier_type',)]
+    package_id = flattened_data[('id',)]
+
+    existing_doi = Session.query(DOI).filter(DOI.identifier == identifier).first()
+    if not existing_doi:
+        # And check against the datacite service
+        try:
+            datacite_doi = datacite_api.get(identifier)
+            if not datacite_doi.text:
+                raise Invalid("DOI %s does not exist in Datacite" % identifier)
+        except HTTPError:
+            raise Invalid("DOI %s does not exist in Datacite" % identifier)
+            pass
+    else:
+        if not existing_doi.package_id == package_id:
+            log.error('This DOI already exists and belongs to %s' % existing_doi.package_id)
+            raise Invalid('This DOI already exists and belongs to %s' % existing_doi.package_id)
+
 def record_existing_unique_identifier(package_id, identifier):
     """
     Based on a provided identifier, checks datacite for an existing DOI
@@ -213,18 +242,19 @@ def record_existing_unique_identifier(package_id, identifier):
     datacite_api = DOIDataCiteAPI()
 
     # Check this identifier doesn't exist in the table
-    if not Session.query(DOI).filter(DOI.identifier == identifier).count():
-
+    existing_doi = Session.query(DOI).filter(DOI.identifier == identifier).first()
+    if not existing_doi:
         # And check against the datacite service
         try:
             datacite_doi = datacite_api.get(identifier)
+            if datacite_doi.text:
+                # Determine whether or not we need to delete a doi that points to the current dataset
+                doi_for_this_pkg = Session.query(DOI).filter(DOI.package_id == package_id).first()
+                if doi_for_this_pkg:
+                    datacite_api
+                doi = DOI(package_id=package_id, identifier=identifier)
+                Session.add(doi)
+                Session.commit()
+                return doi
         except HTTPError:
             pass
-
-        if datacite_doi.text:
-            doi = DOI(package_id=package_id, identifier=identifier)
-            Session.add(doi)
-            Session.commit()
-            return doi
-        else:
-            return False  # DOI didn't exist
