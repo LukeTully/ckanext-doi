@@ -9,7 +9,7 @@ import ckan.logic as logic
 from ckan.lib import helpers as h
 from ckan import model
 from ckanext.doi.model import doi as doi_model
-from ckanext.doi.lib import get_doi, publish_doi, update_doi, create_unique_identifier, get_site_url, build_metadata, validate_metadata, record_existing_unique_identifier
+from ckanext.doi.lib import get_doi, publish_doi, update_doi, create_unique_identifier, get_site_url, build_metadata, validate_metadata, record_existing_unique_identifier, check_existing_doi
 from ckanext.doi.helpers import package_get_year, now, get_site_title
 
 get_action = logic.get_action
@@ -25,6 +25,12 @@ class DOIPlugin(p.SingletonPlugin, p.toolkit.DefaultDatasetForm):
     p.implements(p.IConfigurer)
     p.implements(p.IPackageController, inherit=True)
     p.implements(p.ITemplateHelpers, inherit=True)
+    p.implements(p.IValidators)
+
+    def get_validators(self):
+        return {
+            'doi': check_existing_doi
+        }
 
     # IConfigurable
     def configure(self, config):
@@ -50,9 +56,18 @@ class DOIPlugin(p.SingletonPlugin, p.toolkit.DefaultDatasetForm):
         @return:
         """
         # Only create a new DOI if the user has requested it
-        if hasattr(pkg_dict, "doi_auto_create"):
-            # Create a new doi
-            create_unique_identifier(pkg_dict['id'])
+        if "dataset_category" in pkg_dict:
+
+            # Load the local DOI
+            doi = get_doi(pkg_dict['id'])
+
+            # There is a chance that a doi has already been created for this pkg_id
+            # and could cause an integrity error if another is added
+            if not doi:
+                # Create a new doi
+                create_unique_identifier(pkg_dict['id'])
+                # Remove the auto create field from the dataset pkg
+                pkg_dict.pop('dataset_category')
 
         return pkg_dict
 
@@ -80,50 +95,19 @@ class DOIPlugin(p.SingletonPlugin, p.toolkit.DefaultDatasetForm):
         # Load the local DOI
         doi = get_doi(package_id)
 
-        if 'doi_auto_create' in pkg_dict:
-            if not doi:
+        # Auto create overwrites anything in identifier
+        # a DOI or identifier might already exist and in this case that DOI will be used
+        if not doi:
+            if 'doi_auto_create' in pkg_dict:
+
                 # Overwrite any existing identifier with a newly minted DOI
                 create_unique_identifier(package_id)
-            pkg_dict['identifier'] = doi.identifier
-            pkg_dict['identifier_type'] = 'doi'
-            # Remove the auto create field from the dataset pkg
-            pkg_dict.pop('doi_auto_create')
-
-        # If we don't have a DOI, create one
-        # This could happen if the DOI module is enabled after a dataset has been created
-        if not doi:
-            if pkg_dict.get('identifier') and pkg_dict.get('identifier_type'):
-                # We don't have a DOI, we're not auto creating one, the user has input an existing doi
-                new_doi = record_existing_unique_identifier(
-                    package_id, pkg_dict['identifier'])
-
-                # If the existing doi was successfully recorded
-                if new_doi:
-                    # Assign the doi
-                    doi = new_doi
+                # Remove the auto create field from the dataset pkg
+                pkg_dict.pop('doi_auto_create')
             else:
-                # TODO: Remove DOI?
                 return pkg_dict
-        elif pkg_dict.get('identifier') and pkg_dict.get('identifier_type'):
-            # A DOI has been provided by the user
-            # Check if the DOI in our table has the same identifier
-            if doi.identifier is not pkg_dict['identifier']:
-                # Remove from our DOI table
-                doi.delete()
 
-                # Make sure the new DOI is registered with DataCite
-                new_doi = record_existing_unique_identifier(
-                    package_id, pkg_dict['identifier'])
-                if new_doi:
-                    doi = new_doi
-
-        elif pkg_dict.get('identifier_type') == 'other':
-            # Remove the DOi from our database
-            doi.delete()
-
-            # Let the other type identifier persist in the dataset package
-            return pkg_dict
-
+        # TODO: Handle manual input again
         # Is this active and public? If so we need to make sure we have an active DOI
         if pkg_dict.get('state', 'active') == 'active' and not pkg_dict.get('private', False):
 
@@ -147,7 +131,6 @@ class DOIPlugin(p.SingletonPlugin, p.toolkit.DefaultDatasetForm):
                     # Not the same, so we want to update the metadata
                     update_doi(package_id, **metadata_dict)
                     h.flash_success('DataCite DOI metadata updated')
-
                     # TODO: If editing a dataset older than 5 days, create DOI revision
 
             # New DOI - publish to datacite
